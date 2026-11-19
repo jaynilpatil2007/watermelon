@@ -1,0 +1,195 @@
+generator client {
+    provider = "prisma-client"
+    output   = "../src/generated/prisma"
+}
+
+datasource db {
+    provider = "postgresql"
+}
+
+enum DiscussionType {
+  ISSUE
+  PULL_REQUEST
+  DISCUSSION
+}
+
+enum DiscussionStatus {
+  OPEN
+  CLOSED
+  MERGED
+}
+
+enum MessageType {
+  ROOT
+  COMMENT
+  REVIEW
+  REVIEW_COMMENT
+}
+
+enum DecisionStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  SUPERSEDED
+  UNRESOLVED
+}
+
+enum AlternativeStatus {
+  PROPOSED
+  ACCEPTED
+  REJECTED
+  DEFERRED
+}
+
+enum EvidenceType {
+  SUPPORTING
+  CONTRADICTING
+  CONTEXT
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+
+  repositories Repository[]
+
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Repository {
+  id            String   @id @default(cuid())
+
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  owner         String
+  name          String
+  fullName      String   @unique
+  url           String
+  defaultBranch String?
+
+  lastSyncedAt  DateTime?
+
+  discussions   Discussion[]
+  decisions     Decision[]
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Discussion {
+  id              String   @id @default(cuid())
+
+  repositoryId    String
+  repository      Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  externalId      String
+  number          Int
+
+  title           String
+  type            DiscussionType
+  status          DiscussionStatus
+
+  url             String
+  authorLogin     String?
+
+  sourceCreatedAt DateTime?
+  sourceUpdatedAt DateTime?
+
+  messages        Message[]
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([repositoryId, externalId])
+  @@index([repositoryId, number])
+}
+
+model Message {
+  id              String   @id @default(cuid())
+
+  discussionId    String
+  discussion      Discussion @relation(fields: [discussionId], references: [id], onDelete: Cascade)
+
+  externalId      String
+  type            MessageType
+
+  body            String   @db.Text
+  authorLogin     String?
+
+  sourceCreatedAt DateTime?
+
+  evidence        DecisionEvidence[]
+
+  createdAt       DateTime @default(now())
+
+  @@unique([discussionId, externalId])
+  @@index([discussionId])
+}
+
+model Decision {
+  id            String   @id @default(cuid())
+
+  repositoryId  String
+  repository    Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  title         String
+  summary       String   @db.Text
+  rationale     String?  @db.Text
+
+  status        DecisionStatus @default(PROPOSED)
+
+  confidence    Float?
+  category      String?
+
+  alternatives  Alternative[]
+  evidence      DecisionEvidence[]
+
+  extractedAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@index([repositoryId])
+  @@index([status])
+}
+
+model Alternative {
+  id              String   @id @default(cuid())
+
+  decisionId      String
+  decision        Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  title           String
+  description     String?  @db.Text
+
+  status          AlternativeStatus
+
+  rejectionReason String?  @db.Text
+
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([decisionId])
+  @@index([status])
+}
+
+model DecisionEvidence {
+  id            String   @id @default(cuid())
+
+  decisionId    String
+  decision      Decision @relation(fields: [decisionId], references: [id], onDelete: Cascade)
+
+  messageId     String
+  message       Message @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  quote         String   @db.Text
+  evidenceType  EvidenceType @default(SUPPORTING)
+
+  createdAt     DateTime @default(now())
+
+  @@unique([decisionId, messageId])
+  @@index([messageId])
+}
